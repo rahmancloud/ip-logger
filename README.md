@@ -17,7 +17,7 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 
 | Service | Purpose |
 |---|---|
-| **CloudFront** | HTTPS delivery, HTTP→HTTPS redirect, caches S3 content |
+| **CloudFront** | HTTPS delivery, HTTP→HTTPS redirect, caches S3 content, custom domain `myip.amancloud.com` |
 | **S3** | Private bucket hosting static HTML/JS (no public access) |
 | **API Gateway** | REST API — `POST /log-ip` and `GET /admin/ips` |
 | **Lambda** | `show-my-ip-log` writes IPs; `show-my-ip-get` reads all IPs |
