@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin — IP Logs</title>
+  <title>Admin — Show My IP</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -140,7 +140,7 @@
   <!-- Auth screen -->
   <div id="authScreen" class="auth-form">
     <h2>🔐 Admin Login</h2>
-    <p>Enter your admin API key to view IP logs.</p>
+    <p>Enter your admin API key to view IP address records.</p>
     <div class="input-group">
       <input type="password" id="apiKeyInput" placeholder="Admin API Key" onkeydown="if(event.key==='Enter')login()" />
       <button onclick="login()">Login</button>
@@ -151,7 +151,7 @@
   <!-- Dashboard -->
   <div id="dashboard" class="container dashboard">
     <header>
-      <h1>📋 IP Address Logs</h1>
+      <h1>📋 Show My IP — Records</h1>
       <div style="display:flex;gap:8px">
         <button class="refresh-btn" onclick="loadIPs()">↻ Refresh</button>
         <button class="logout-btn" onclick="logout()">Logout</button>

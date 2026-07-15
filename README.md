@@ -1,6 +1,6 @@
-# IP Logger
+# Show My IP Address
 
-A serverless AWS application that serves a secure web page where visitors can record their IP address, with an admin dashboard to view all logged IPs.
+A serverless AWS application that shows visitors their public IP address and saves it, with an admin dashboard to view all recorded IPs.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 | **CloudFront** | HTTPS delivery, HTTP→HTTPS redirect, caches S3 content |
 | **S3** | Private bucket hosting static HTML/JS (no public access) |
 | **API Gateway** | REST API — `POST /log-ip` and `GET /admin/ips` |
-| **Lambda** | `ip-logger-log` writes IPs; `ip-logger-get` reads all IPs |
+| **Lambda** | `show-my-ip-log` writes IPs; `show-my-ip-get` reads all IPs |
 | **DynamoDB** | `ip_logs` table (pay-per-request), stores `id`, `ip_address`, `timestamp` |
 
 ## Repository Structure
@@ -28,11 +28,11 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 ```
 ├── template.yaml          # CloudFormation template (full stack)
 ├── lambda/
-│   ├── log_ip.py          # Lambda: record IP address to DynamoDB
+│   ├── log_ip.py          # Lambda: save visitor IP address to DynamoDB
 │   └── get_ips.py         # Lambda: list all IP records (admin, key-protected)
 ├── static/
-│   ├── index.html         # Public page with "Record My IP" button
-│   └── admin.html         # Admin dashboard — view/search all logged IPs
+│   ├── index.html         # Public page — shows visitor their IP address
+│   └── admin.html         # Admin dashboard — view/search all recorded IPs
 └── README.md
 ```
 
@@ -47,7 +47,7 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 ```bash
 aws cloudformation deploy \
   --template-file template.yaml \
-  --stack-name ip-logger \
+  --stack-name show-my-ip \
   --parameter-overrides AdminApiKey=YOUR_STRONG_SECRET_HERE \
   --capabilities CAPABILITY_NAMED_IAM \
   --region ap-southeast-5
@@ -57,7 +57,7 @@ aws cloudformation deploy \
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name ip-logger \
+  --stack-name show-my-ip \
   --query 'Stacks[0].Outputs' \
   --output table
 ```
@@ -88,7 +88,7 @@ with the `ApiEndpoint` value from the CloudFormation stack outputs.
 ## Usage
 
 ### Public page (`/index.html`)
-Open the page and click **"Record My IP"**. Your IP address is sent via `POST /log-ip` and stored in DynamoDB with a UTC timestamp.
+Open the page and click **"Show My IP Address"**. Your public IP is retrieved via `POST /log-ip`, displayed prominently on screen, and saved to DynamoDB with a UTC timestamp.
 
 ### Admin page (`/admin.html`)
 Enter the `AdminApiKey` you used during deployment. The dashboard shows:
@@ -178,11 +178,11 @@ Prices sourced from the AWS Pricing API. All figures in USD. This stack is desig
 ```bash
 # Empty the S3 bucket first (required before stack deletion)
 BUCKET=$(aws cloudformation describe-stacks \
-  --stack-name ip-logger \
+  --stack-name show-my-ip \
   --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
   --output text)
 aws s3 rm s3://$BUCKET --recursive
 
 # Delete the stack
-aws cloudformation delete-stack --stack-name ip-logger --region ap-southeast-5
+aws cloudformation delete-stack --stack-name show-my-ip --region ap-southeast-5
 ```
