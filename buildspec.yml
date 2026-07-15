@@ -1,0 +1,55 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+
+  pre_build:
+    commands:
+      - echo "Deploying show-my-ip CloudFormation stack..."
+      - aws --version
+
+  build:
+    commands:
+      # Deploy the CloudFormation stack (ap-southeast-5 is where the stack lives)
+      - |
+        aws cloudformation deploy \
+          --template-file template.yaml \
+          --stack-name show-my-ip \
+          --parameter-overrides \
+            AdminApiKey=$ADMIN_API_KEY \
+            CustomDomain=myip.amancloud.com \
+            AcmCertificateArn=arn:aws:acm:us-east-1:088044432122:certificate/ba2a34f3-2888-4591-ac91-826525caff65 \
+            Environment=prod \
+          --capabilities CAPABILITY_NAMED_IAM \
+          --region ap-southeast-5 \
+          --no-fail-on-empty-changeset
+
+      # Upload static files to S3
+      - echo "Uploading static files..."
+      - |
+        aws s3 cp static/index.html \
+          s3://ip-logger-static-088044432122/index.html \
+          --content-type text/html
+      - |
+        aws s3 cp static/admin.html \
+          s3://ip-logger-static-088044432122/admin.html \
+          --content-type text/html
+
+      # Invalidate CloudFront cache
+      - echo "Invalidating CloudFront cache..."
+      - |
+        aws cloudfront create-invalidation \
+          --distribution-id E1PNX0FG1K2KH5 \
+          --paths "/*"
+
+  post_build:
+    commands:
+      - echo "Deployment complete."
+      - |
+        aws cloudformation describe-stacks \
+          --stack-name show-my-ip \
+          --region ap-southeast-5 \
+          --query 'Stacks[0].{Status:StackStatus}' \
+          --output table
