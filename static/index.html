@@ -108,8 +108,7 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        status.className = 'success';
-        status.textContent = '✅ IP address saved successfully!';
+        status.textContent = '';
         ipValue.textContent = data.ip;
         ipDisplay.style.display = 'block';
       } catch (err) {
