@@ -322,29 +322,25 @@
       panel.innerHTML = '<div class="info-loading">🔍 Analysing your IP…</div>';
 
       try {
-        // ip-api.com free tier — no API key needed, 45 req/min
-        const res = await fetch(`https://ip-api.com/json/${ip}?fields=status,country,regionName,city,zip,isp,org,as,mobile,proxy,hosting,lat,lon,timezone`);
+        // ipapi.co supports HTTPS, auto-detects caller IP, no key needed (1000 req/day free)
+        const res = await fetch(`https://ipapi.co/json/`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json();
 
-        if (d.status !== 'success') throw new Error('Lookup failed');
+        if (d.error) throw new Error(d.reason || 'Lookup failed');
 
         const boolTag = (val) => val
           ? '<span class="tag tag-yes">Yes</span>'
           : '<span class="tag tag-no">No</span>';
 
         const rows = [
-          ['🌍 Country',    escHtml(d.country)],
-          ['📍 Region',     escHtml(d.regionName)],
+          ['🌍 Country',    escHtml(d.country_name)],
+          ['📍 Region',     escHtml(d.region)],
           ['🏙️ City',       escHtml(d.city)],
-          ['📮 Postal',     escHtml(d.zip || '—')],
+          ['📮 Postal',     escHtml(d.postal)],
           ['🕐 Timezone',   escHtml(d.timezone)],
-          ['📡 ISP',        escHtml(d.isp)],
-          ['🏢 Org',        escHtml(d.org)],
-          ['🔢 ASN',        escHtml(d.as)],
-          ['📱 Mobile',     boolTag(d.mobile)],
-          ['🕵️ VPN/Proxy',  boolTag(d.proxy)],
-          ['🖥️ Datacenter', boolTag(d.hosting)],
+          ['📡 ISP',        escHtml(d.org)],
+          ['🔢 ASN',        escHtml(d.asn)],
         ];
 
         panel.innerHTML = rows.map(([k, v]) =>
