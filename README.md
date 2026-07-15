@@ -27,6 +27,7 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 
 ```
 ├── template.yaml          # CloudFormation template (full stack)
+├── buildspec.yml          # CodeBuild spec — deploys CFN, uploads S3, invalidates CloudFront
 ├── lambda/
 │   ├── log_ip.py          # Lambda: save visitor IP address to DynamoDB
 │   └── get_ips.py         # Lambda: list all IP records (admin, key-protected)
@@ -35,6 +36,67 @@ Browser → CloudFront (HTTPS) → S3 (static HTML/JS)
 │   └── admin.html         # Admin dashboard — view/search all recorded IPs
 └── README.md
 ```
+
+## CI/CD Pipeline
+
+Any push to the `main` branch of the CodeCommit repository automatically deploys the stack.
+
+```
+CodeCommit (ap-southeast-1)
+    │  push to main
+    ▼
+EventBridge Rule
+    │  triggers
+    ▼
+CodeBuild (ap-southeast-1)
+    │  runs buildspec.yml
+    ├── cfn deploy → CloudFormation stack (ap-southeast-5)
+    ├── s3 cp     → uploads index.html + admin.html
+    └── cloudfront create-invalidation → clears CDN cache
+```
+
+### Remotes
+
+The repository has two remotes:
+
+| Remote | URL |
+|---|---|
+| `origin` | `git@github.com:rahmancloud/ip-logger.git` |
+| `codecommit` | `https://git-codecommit.ap-southeast-1.amazonaws.com/v1/repos/show-my-ip` |
+
+Push to either remote. Only `codecommit` triggers the pipeline:
+
+```bash
+git push origin main      # GitHub only — no deployment
+git push codecommit main  # triggers CodeBuild deployment
+```
+
+Or push to both at once:
+
+```bash
+git push origin main && git push codecommit main
+```
+
+### Viewing build logs
+
+```bash
+# List recent builds
+aws codebuild list-builds-for-project --project-name show-my-ip --region ap-southeast-1
+
+# Get build status
+aws codebuild batch-get-builds --ids <BUILD_ID> \
+  --region ap-southeast-1 \
+  --query 'builds[0].{Status:buildStatus,Phase:currentPhase}'
+
+# View logs
+aws logs get-log-events \
+  --log-group-name /aws/codebuild/show-my-ip \
+  --log-stream-name <BUILD_ID_WITHOUT_PREFIX> \
+  --region ap-southeast-1 \
+  --query 'events[*].message' --output text
+```
+
+---
 
 ## Deploy with CloudFormation
 
