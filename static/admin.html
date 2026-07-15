@@ -1,142 +1,217 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin — Show My IP</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f4f8;
+      --card-bg: #ffffff;
+      --text-primary: #1a202c;
+      --text-muted: #718096;
+      --text-sub: #4a5568;
+      --border: #e2e8f0;
+      --row-hover: #fafbff;
+      --thead-bg: #f7f8fc;
+      --row-border: #f0f4f8;
+      --btn-bg: #4f46e5;
+      --btn-hover: #4338ca;
+      --btn-disabled: #a5b4fc;
+      --badge-bg: #e0e7ff;
+      --badge-color: #4f46e5;
+      --error: #dc2626;
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.10);
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.07);
+      --shadow-table: 0 2px 12px rgba(0,0,0,0.08);
+      --toggle-bg: #e2e8f0;
+      --toggle-knob: #fff;
+      --input-bg: #fff;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text-primary: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-sub: #cbd5e1;
+      --border: #334155;
+      --row-hover: #263347;
+      --thead-bg: #162032;
+      --row-border: #1e293b;
+      --btn-bg: #6366f1;
+      --btn-hover: #4f46e5;
+      --btn-disabled: #3730a3;
+      --badge-bg: #312e81;
+      --badge-color: #a5b4fc;
+      --error: #f87171;
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.40);
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.30);
+      --shadow-table: 0 2px 12px rgba(0,0,0,0.30);
+      --toggle-bg: #4f46e5;
+      --toggle-knob: #fff;
+      --input-bg: #1e293b;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f0f4f8;
+      background: var(--bg);
       min-height: 100vh;
       padding: 40px 20px;
+      transition: background 0.3s;
     }
-    .container { max-width: 900px; margin: 0 auto; }
-    header {
+
+    /* Dark mode toggle */
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 32px;
-      flex-wrap: wrap;
-      gap: 16px;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      z-index: 100;
     }
-    h1 { font-size: 1.6rem; color: #1a202c; }
+    .theme-toggle span { font-size: 0.8rem; color: var(--text-muted); transition: color 0.3s; }
+    .toggle-track {
+      width: 44px; height: 24px;
+      background: var(--toggle-bg);
+      border-radius: 999px;
+      position: relative;
+      transition: background 0.3s;
+    }
+    .toggle-knob {
+      position: absolute; top: 3px; left: 3px;
+      width: 18px; height: 18px;
+      background: var(--toggle-knob);
+      border-radius: 50%;
+      transition: transform 0.3s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    [data-theme="dark"] .toggle-knob { transform: translateX(20px); }
+
+    .container { max-width: 900px; margin: 0 auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 32px; flex-wrap: wrap; gap: 16px;
+    }
+    h1 { font-size: 1.6rem; color: var(--text-primary); transition: color 0.3s; }
+
     .auth-form {
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      box-shadow: var(--shadow-card);
       padding: 40px;
       max-width: 420px;
       margin: 80px auto 0;
       text-align: center;
+      transition: background 0.3s;
     }
-    .auth-form h2 { margin-bottom: 8px; color: #1a202c; }
-    .auth-form p { color: #718096; margin-bottom: 24px; font-size: 0.9rem; }
+    .auth-form h2 { margin-bottom: 8px; color: var(--text-primary); transition: color 0.3s; }
+    .auth-form p { color: var(--text-muted); margin-bottom: 24px; font-size: 0.9rem; transition: color 0.3s; }
+
     .input-group { display: flex; gap: 8px; }
-    input[type="password"] {
-      flex: 1;
-      padding: 10px 14px;
-      border: 1px solid #e2e8f0;
+    input[type="password"], input[type="search"] {
+      background: var(--input-bg);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
       border-radius: 8px;
       font-size: 0.95rem;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, background 0.3s, color 0.3s;
     }
-    input[type="password"]:focus { border-color: #4f46e5; }
+    input[type="password"] { flex: 1; padding: 10px 14px; }
+    input[type="password"]:focus, input[type="search"]:focus { border-color: var(--btn-bg); }
+
     button {
-      background: #4f46e5;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 20px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s;
-      white-space: nowrap;
+      background: var(--btn-bg); color: #fff; border: none;
+      border-radius: 8px; padding: 10px 20px;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      transition: background 0.2s; white-space: nowrap;
     }
-    button:hover { background: #4338ca; }
-    button:disabled { background: #a5b4fc; cursor: not-allowed; }
-    #authError { color: #dc2626; font-size: 0.85rem; margin-top: 10px; min-height: 18px; }
+    button:hover { background: var(--btn-hover); }
+    button:disabled { background: var(--btn-disabled); cursor: not-allowed; }
+
+    #authError { color: var(--error); font-size: 0.85rem; margin-top: 10px; min-height: 18px; }
+
     .dashboard { display: none; }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
+      gap: 16px; margin-bottom: 24px;
     }
     .stat-card {
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-      padding: 20px;
-      text-align: center;
+      box-shadow: var(--shadow-sm);
+      padding: 20px; text-align: center;
+      transition: background 0.3s;
     }
-    .stat-number { font-size: 2rem; font-weight: 700; color: #4f46e5; }
-    .stat-label { font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .stat-number { font-size: 2rem; font-weight: 700; color: var(--btn-bg); transition: color 0.3s; }
+    .stat-label {
+      font-size: 0.8rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;
+      transition: color 0.3s;
+    }
+
     .controls {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
+      display: flex; gap: 12px; align-items: center;
+      margin-bottom: 16px; flex-wrap: wrap;
     }
     input[type="search"] {
-      flex: 1;
-      min-width: 200px;
-      padding: 9px 14px;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      outline: none;
+      flex: 1; min-width: 200px; padding: 9px 14px; font-size: 0.9rem;
     }
-    input[type="search"]:focus { border-color: #4f46e5; }
+
     .table-wrap {
-      background: #fff;
+      background: var(--card-bg);
       border-radius: 12px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      box-shadow: var(--shadow-table);
       overflow: hidden;
+      transition: background 0.3s;
     }
     table { width: 100%; border-collapse: collapse; }
-    thead { background: #f7f8fc; }
+    thead { background: var(--thead-bg); transition: background 0.3s; }
     th {
-      text-align: left;
-      padding: 14px 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #4a5568;
-      border-bottom: 1px solid #e2e8f0;
+      text-align: left; padding: 14px 20px;
+      font-size: 0.8rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-sub); border-bottom: 1px solid var(--border);
+      transition: color 0.3s, border-color 0.3s;
     }
     td {
-      padding: 14px 20px;
-      font-size: 0.9rem;
-      color: #2d3748;
-      border-bottom: 1px solid #f0f4f8;
+      padding: 14px 20px; font-size: 0.9rem;
+      color: var(--text-primary); border-bottom: 1px solid var(--row-border);
+      transition: color 0.3s, border-color 0.3s;
     }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #fafbff; }
+    tr:hover td { background: var(--row-hover); }
+
     .ip-cell { font-family: monospace; font-size: 0.95rem; }
     .badge {
       display: inline-block;
-      background: #e0e7ff;
-      color: #4f46e5;
-      border-radius: 999px;
-      padding: 2px 10px;
-      font-size: 0.78rem;
-      font-weight: 600;
+      background: var(--badge-bg); color: var(--badge-color);
+      border-radius: 999px; padding: 2px 10px;
+      font-size: 0.78rem; font-weight: 600;
+      transition: background 0.3s, color 0.3s;
     }
-    #loadingMsg { text-align: center; padding: 40px; color: #718096; }
-    #emptyMsg { text-align: center; padding: 40px; color: #a0aec0; display: none; }
-    .refresh-btn { background: #fff; color: #4f46e5; border: 1.5px solid #4f46e5; }
-    .refresh-btn:hover { background: #eef2ff; }
-    .logout-btn { background: #fff; color: #dc2626; border: 1.5px solid #dc2626; font-size: 0.85rem; padding: 8px 16px; }
-    .logout-btn:hover { background: #fff5f5; }
+
+    .refresh-btn { background: transparent; color: var(--btn-bg); border: 1.5px solid var(--btn-bg); }
+    .refresh-btn:hover { background: var(--badge-bg); }
+    .logout-btn { background: transparent; color: var(--error); border: 1.5px solid var(--error); font-size: 0.85rem; padding: 8px 16px; }
+    .logout-btn:hover { opacity: 0.8; }
   </style>
 </head>
 <body>
+
+  <label class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+    <span id="themeLabel">🌙 Dark</span>
+    <div class="toggle-track"><div class="toggle-knob"></div></div>
+  </label>
+
   <!-- Auth screen -->
   <div id="authScreen" class="auth-form">
     <h2>🔐 Admin Login</h2>
@@ -175,7 +250,7 @@
 
     <div class="controls">
       <input type="search" id="searchInput" placeholder="Search by IP address…" oninput="filterTable()" />
-      <span id="resultCount" style="color:#718096;font-size:0.85rem;white-space:nowrap;"></span>
+      <span id="resultCount" style="color:var(--text-muted);font-size:0.85rem;white-space:nowrap;"></span>
     </div>
 
     <div class="table-wrap">
@@ -189,10 +264,9 @@
           </tr>
         </thead>
         <tbody id="tableBody">
-          <tr><td colspan="4" id="loadingMsg">Loading…</td></tr>
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>
         </tbody>
       </table>
-      <div id="emptyMsg">No records found.</div>
     </div>
   </div>
 
@@ -201,97 +275,88 @@
     let allItems = [];
     let adminKey = '';
 
+    const saved = localStorage.getItem('theme') || 'light';
+    setTheme(saved);
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('themeLabel').textContent = theme === 'dark' ? '☀️ Light' : '🌙 Dark';
+      localStorage.setItem('theme', theme);
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
     function login() {
       const key = document.getElementById('apiKeyInput').value.trim();
-      if (!key) {
-        document.getElementById('authError').textContent = 'Please enter the admin key.';
-        return;
-      }
+      if (!key) { document.getElementById('authError').textContent = 'Please enter the admin key.'; return; }
       adminKey = key;
       document.getElementById('authError').textContent = '';
       loadIPs();
     }
 
     function logout() {
-      adminKey = '';
-      allItems = [];
+      adminKey = ''; allItems = [];
       document.getElementById('authScreen').style.display = 'block';
       document.getElementById('dashboard').style.display = 'none';
       document.getElementById('apiKeyInput').value = '';
     }
 
     async function loadIPs() {
-      document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" id="loadingMsg" style="text-align:center;padding:40px;color:#718096">Loading…</td></tr>';
-
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">Loading…</td></tr>';
       try {
-        const res = await fetch(`${API_URL}/admin/ips`, {
-          headers: { 'X-Admin-Key': adminKey }
-        });
-
-        if (res.status === 403) {
-          document.getElementById('authError').textContent = 'Invalid admin key.';
-          return;
-        }
+        const res = await fetch(`${API_URL}/admin/ips`, { headers: { 'X-Admin-Key': adminKey } });
+        if (res.status === 403) { document.getElementById('authError').textContent = 'Invalid admin key.'; return; }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
         const data = await res.json();
         allItems = data.items || [];
-
-        // Show dashboard
         document.getElementById('authScreen').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
-
         updateStats();
         renderTable(allItems);
       } catch (err) {
         document.getElementById('authError').textContent = `Error: ${err.message}`;
-        document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:#dc2626">Failed to load data: ${err.message}</td></tr>`;
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--error)">Failed to load: ${err.message}</td></tr>`;
       }
     }
 
     function updateStats() {
       document.getElementById('totalCount').textContent = allItems.length;
-      const unique = new Set(allItems.map(i => i.ip_address)).size;
-      document.getElementById('uniqueCount').textContent = unique;
+      document.getElementById('uniqueCount').textContent = new Set(allItems.map(i => i.ip_address)).size;
       const today = new Date().toISOString().slice(0, 10);
-      const todayCount = allItems.filter(i => i.timestamp && i.timestamp.startsWith(today)).length;
-      document.getElementById('todayCount').textContent = todayCount;
+      document.getElementById('todayCount').textContent = allItems.filter(i => i.timestamp?.startsWith(today)).length;
     }
 
     function renderTable(items) {
-      const tbody = document.getElementById('tableBody');
       document.getElementById('resultCount').textContent = `Showing ${items.length} of ${allItems.length}`;
-
       if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#a0aec0">No records match your search.</td></tr>';
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">No records match your search.</td></tr>';
         return;
       }
-
-      tbody.innerHTML = items.map((item, idx) => `
+      document.getElementById('tableBody').innerHTML = items.map((item, idx) => `
         <tr>
           <td>${idx + 1}</td>
           <td class="ip-cell"><span class="badge">${escHtml(item.ip_address || '—')}</span></td>
           <td>${item.timestamp ? formatDate(item.timestamp) : '—'}</td>
-          <td style="font-family:monospace;font-size:0.78rem;color:#a0aec0">${escHtml(item.id || '—')}</td>
+          <td style="font-family:monospace;font-size:0.78rem;color:var(--text-muted)">${escHtml(item.id || '—')}</td>
         </tr>
       `).join('');
     }
 
     function filterTable() {
       const q = document.getElementById('searchInput').value.toLowerCase();
-      const filtered = allItems.filter(i =>
-        (i.ip_address || '').toLowerCase().includes(q) ||
-        (i.id || '').toLowerCase().includes(q)
-      );
-      renderTable(filtered);
+      renderTable(allItems.filter(i =>
+        (i.ip_address || '').toLowerCase().includes(q) || (i.id || '').toLowerCase().includes(q)
+      ));
     }
 
     function formatDate(iso) {
       try {
         return new Date(iso).toLocaleString('en-GB', {
           year: 'numeric', month: 'short', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit',
-          timeZone: 'UTC'
+          hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC'
         }) + ' UTC';
       } catch { return iso; }
     }
