@@ -104,6 +104,75 @@ Enter the `AdminApiKey` you used during deployment. The dashboard shows:
 - Lambda IAM role is **least-privilege**: only `PutItem` and `Scan` on the specific DynamoDB table
 - CORS origin is reflected from the request (lock it to your CloudFront domain in production)
 
+## Cost Estimate (ap-southeast-5 — Asia Pacific, Malaysia)
+
+Prices sourced from the AWS Pricing API. All figures in USD. This stack is designed to cost nearly nothing at low traffic — every service either has a generous free tier or is pay-per-request with no idle cost.
+
+### Pricing per service
+
+| Service | Dimension | Price |
+|---|---|---|
+| **Lambda** | Requests | $0.18 per 1M requests |
+| **Lambda** | Duration (x86, 128 MB) | $0.0000135 per GB-second |
+| **API Gateway** (REST) | Requests | $0.0000038 per request (~$3.83 per 1M) |
+| **DynamoDB** (on-demand) | Write request unit | $0.64 per 1M WRUs |
+| **DynamoDB** (on-demand) | Read request unit | $0.1285 per 1M RRUs |
+| **DynamoDB** | Storage | Free for first 25 GB/month |
+| **S3** | Storage (Standard) | $0.0225 per GB/month |
+| **S3** | PUT/POST requests | $0.0045 per 1,000 |
+| **S3** | GET requests | $0.00036 per 1,000 |
+| **CloudFront** | HTTPS requests | $0.012 per 10,000 |
+| **CloudFront** | Data transfer out | $0.120 per GB (first 10 TB) |
+
+### Monthly cost scenarios
+
+#### Scenario 1 — Low traffic (1,000 button clicks/month)
+
+| Service | Usage | Cost |
+|---|---|---|
+| Lambda (log + get) | ~2,000 invocations × 200ms × 128MB | < $0.01 |
+| API Gateway | 2,000 requests | < $0.01 |
+| DynamoDB | 1,000 WRUs + occasional reads | < $0.01 |
+| S3 | ~2 KB stored, ~2,000 GET requests | < $0.01 |
+| CloudFront | ~2,000 HTTPS requests + ~1 MB transfer | < $0.01 |
+| **Total** | | **~$0.00 – $0.05/month** |
+
+> Comfortably within AWS Free Tier limits (Lambda: 1M req free, DynamoDB: 25 GB + 2.5M reads/writes free, S3: 5 GB free, CloudFront: 1 TB transfer + 10M requests free for first 12 months).
+
+#### Scenario 2 — Moderate traffic (100,000 button clicks/month)
+
+| Service | Usage | Cost |
+|---|---|---|
+| Lambda | 200,000 invocations × 200ms × 128MB | ~$0.07 |
+| API Gateway | 200,000 requests | ~$0.77 |
+| DynamoDB | 100,000 WRUs + 10,000 RRUs | ~$0.07 |
+| S3 | Negligible storage + requests | ~$0.01 |
+| CloudFront | 200,000 requests + ~100 MB transfer | ~$0.26 |
+| **Total** | | **~$1.18/month** |
+
+#### Scenario 3 — High traffic (1,000,000 button clicks/month)
+
+| Service | Usage | Cost |
+|---|---|---|
+| Lambda | 2M invocations × 200ms × 128MB | ~$0.68 |
+| API Gateway | 2M requests | ~$7.65 |
+| DynamoDB | 1M WRUs + 100K RRUs | ~$0.65 |
+| S3 | ~1 MB storage + GET requests | ~$0.01 |
+| CloudFront | 2M requests + ~1 GB transfer | ~$2.36 |
+| **Total** | | **~$11.35/month** |
+
+> At this scale, consider switching from REST API Gateway to HTTP API Gateway (60–70% cheaper at $0.0000011 per request) to reduce API costs to ~$2.20/month.
+
+### Cost optimisation tips
+
+- **HTTP API vs REST API** — REST API is used here for familiarity; HTTP API would cut API Gateway costs by ~70%.
+- **CloudFront free tier** — 1 TB data transfer out + 10M HTTPS requests free per month for the first 12 months.
+- **DynamoDB free tier** — 25 GB storage + 2.5M read/write request units free, permanently.
+- **Lambda free tier** — 1M requests + 400,000 GB-seconds free per month, permanently.
+- **TTL on DynamoDB** — Add a TTL attribute to auto-expire old records and keep storage near zero.
+
+---
+
 ## Tear Down
 
 ```bash
