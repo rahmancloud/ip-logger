@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  IP Logger — Serverless stack that serves a secure web page allowing visitors
-  to record their IP address, and an admin page to view all logged IPs.
-  Resources: DynamoDB, Lambda (x2), API Gateway, S3, CloudFront (OAC).
+  Show My IP — Serverless stack that shows visitors their public IP address
+  and an admin dashboard to view all recorded IPs.
+  Resources: DynamoDB, Lambda (x2), API Gateway, S3, CloudFront (OAC), ACM.
 
 # ---------------------------------------------------------------------------
 # Parameters
@@ -14,6 +14,18 @@ Parameters:
     MinLength: 16
     Description: Secret key required to access the admin /admin/ips endpoint.
     Default: CHANGE_ME_USE_A_STRONG_SECRET
+
+  CustomDomain:
+    Type: String
+    Default: myip.amancloud.com
+    Description: Custom domain name for the CloudFront distribution.
+
+  AcmCertificateArn:
+    Type: String
+    Description: >
+      ARN of the ACM certificate for the custom domain.
+      Must be in us-east-1 (required for CloudFront).
+    Default: arn:aws:acm:us-east-1:088044432122:certificate/ba2a34f3-2888-4591-ac91-826525caff65
 
   Environment:
     Type: String
@@ -29,6 +41,7 @@ Resources:
   # ── DynamoDB ──────────────────────────────────────────────────────────────
   IpLogsTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
     Properties:
       TableName: ip_logs
       BillingMode: PAY_PER_REQUEST
@@ -40,13 +53,14 @@ Resources:
           KeyType: HASH
       Tags:
         - Key: Project
-          Value: ip-logger
+          Value: show-my-ip
         - Key: Environment
           Value: !Ref Environment
 
   # ── IAM Role for Lambda ───────────────────────────────────────────────────
   LambdaExecutionRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
     Properties:
       RoleName: ip-logger-lambda-role
       AssumeRolePolicyDocument:
@@ -75,6 +89,7 @@ Resources:
   # ── Lambda: log IP ────────────────────────────────────────────────────────
   LogIpFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
     Properties:
       FunctionName: ip-logger-log
       Runtime: python3.12
@@ -108,11 +123,12 @@ Resources:
               }
       Tags:
         - Key: Project
-          Value: ip-logger
+          Value: show-my-ip
 
   # ── Lambda: get IPs (admin) ───────────────────────────────────────────────
   GetIpsFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
     Properties:
       FunctionName: ip-logger-get
       Runtime: python3.12
@@ -152,14 +168,15 @@ Resources:
               }
       Tags:
         - Key: Project
-          Value: ip-logger
+          Value: show-my-ip
 
   # ── API Gateway ───────────────────────────────────────────────────────────
   RestApi:
     Type: AWS::ApiGateway::RestApi
+    DeletionPolicy: Retain
     Properties:
       Name: ip-logger-api
-      Description: IP Logger REST API
+      Description: Show My IP REST API
       EndpointConfiguration:
         Types:
           - REGIONAL
@@ -167,6 +184,7 @@ Resources:
   # /log-ip resource
   LogIpResource:
     Type: AWS::ApiGateway::Resource
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ParentId: !GetAtt RestApi.RootResourceId
@@ -175,6 +193,7 @@ Resources:
   # POST /log-ip
   LogIpPostMethod:
     Type: AWS::ApiGateway::Method
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ResourceId: !Ref LogIpResource
@@ -190,6 +209,7 @@ Resources:
   # OPTIONS /log-ip (CORS preflight)
   LogIpOptionsMethod:
     Type: AWS::ApiGateway::Method
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ResourceId: !Ref LogIpResource
@@ -215,6 +235,7 @@ Resources:
   # /admin resource
   AdminResource:
     Type: AWS::ApiGateway::Resource
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ParentId: !GetAtt RestApi.RootResourceId
@@ -223,6 +244,7 @@ Resources:
   # /admin/ips resource
   AdminIpsResource:
     Type: AWS::ApiGateway::Resource
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ParentId: !Ref AdminResource
@@ -231,6 +253,7 @@ Resources:
   # GET /admin/ips
   AdminIpsGetMethod:
     Type: AWS::ApiGateway::Method
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ResourceId: !Ref AdminIpsResource
@@ -246,6 +269,7 @@ Resources:
   # OPTIONS /admin/ips (CORS preflight)
   AdminIpsOptionsMethod:
     Type: AWS::ApiGateway::Method
+    DeletionPolicy: Retain
     Properties:
       RestApiId: !Ref RestApi
       ResourceId: !Ref AdminIpsResource
@@ -271,6 +295,7 @@ Resources:
   # API Gateway Deployment
   ApiDeployment:
     Type: AWS::ApiGateway::Deployment
+    DeletionPolicy: Retain
     DependsOn:
       - LogIpPostMethod
       - LogIpOptionsMethod
@@ -283,6 +308,7 @@ Resources:
   # Lambda permissions for API Gateway
   LogIpLambdaPermission:
     Type: AWS::Lambda::Permission
+    DeletionPolicy: Retain
     Properties:
       FunctionName: !GetAtt LogIpFunction.Arn
       Action: lambda:InvokeFunction
@@ -291,6 +317,7 @@ Resources:
 
   GetIpsLambdaPermission:
     Type: AWS::Lambda::Permission
+    DeletionPolicy: Retain
     Properties:
       FunctionName: !GetAtt GetIpsFunction.Arn
       Action: lambda:InvokeFunction
@@ -300,6 +327,7 @@ Resources:
   # ── S3 Bucket (private) ───────────────────────────────────────────────────
   StaticSiteBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub ip-logger-static-${AWS::AccountId}
       PublicAccessBlockConfiguration:
@@ -309,15 +337,16 @@ Resources:
         RestrictPublicBuckets: true
       Tags:
         - Key: Project
-          Value: ip-logger
+          Value: show-my-ip
 
   # ── CloudFront OAC ────────────────────────────────────────────────────────
   CloudFrontOAC:
     Type: AWS::CloudFront::OriginAccessControl
+    DeletionPolicy: Retain
     Properties:
       OriginAccessControlConfig:
         Name: ip-logger-oac
-        Description: OAC for IP Logger S3 bucket
+        Description: OAC for Show My IP S3 bucket
         SigningProtocol: sigv4
         SigningBehavior: always
         OriginAccessControlOriginType: s3
@@ -325,20 +354,27 @@ Resources:
   # ── CloudFront Distribution ───────────────────────────────────────────────
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
+    DeletionPolicy: Retain
     Properties:
       DistributionConfig:
-        Comment: IP Logger static site
+        Comment: Show My IP static site
         DefaultRootObject: index.html
         Enabled: true
         HttpVersion: http2
+        Aliases:
+          - !Ref CustomDomain
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
         Origins:
-          - Id: s3-ip-logger
+          - Id: s3-show-my-ip
             DomainName: !Sub ${StaticSiteBucket}.s3.${AWS::Region}.amazonaws.com
             OriginAccessControlId: !GetAtt CloudFrontOAC.Id
             S3OriginConfig:
               OriginAccessIdentity: ''
         DefaultCacheBehavior:
-          TargetOriginId: s3-ip-logger
+          TargetOriginId: s3-show-my-ip
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods:
             - GET
@@ -346,16 +382,16 @@ Resources:
           CachedMethods:
             - GET
             - HEAD
-          # Managed-CachingOptimized policy
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           Compress: true
       Tags:
         - Key: Project
-          Value: ip-logger
+          Value: show-my-ip
 
   # S3 bucket policy — allow CloudFront OAC only
   StaticSiteBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
     Properties:
       Bucket: !Ref StaticSiteBucket
       PolicyDocument:
@@ -371,17 +407,38 @@ Resources:
               StringEquals:
                 AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
 
+  # ── ACM Certificate (us-east-1, required for CloudFront) ─────────────────
+  # NOTE: This resource is defined here for documentation purposes.
+  # The certificate must be created in us-east-1 and validated via DNS
+  # before the CloudFront distribution can use it.
+  # If deploying fresh, use the AcmCertificateArn parameter to supply
+  # a pre-issued certificate ARN, or enable the resource below and deploy
+  # from us-east-1.
+  #
+  # AcmCertificate:
+  #   Type: AWS::CertificateManager::Certificate
+  #   Properties:
+  #     DomainName: !Ref CustomDomain
+  #     ValidationMethod: DNS
+  #     Tags:
+  #       - Key: Project
+  #         Value: show-my-ip
+
 # ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
 Outputs:
   PublicPageUrl:
-    Description: URL of the public IP logging page
-    Value: !Sub https://${CloudFrontDistribution.DomainName}/index.html
+    Description: Public IP lookup page
+    Value: !Sub https://${CustomDomain}/index.html
 
   AdminPageUrl:
-    Description: URL of the admin IP listing page
-    Value: !Sub https://${CloudFrontDistribution.DomainName}/admin.html
+    Description: Admin IP records dashboard
+    Value: !Sub https://${CustomDomain}/admin.html
+
+  CloudFrontUrl:
+    Description: CloudFront distribution URL (use if custom domain not configured)
+    Value: !Sub https://${CloudFrontDistribution.DomainName}/index.html
 
   ApiEndpoint:
     Description: Base URL of the API Gateway
