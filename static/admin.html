@@ -203,6 +203,68 @@
     .refresh-btn:hover { background: var(--badge-bg); }
     .logout-btn { background: transparent; color: var(--error); border: 1.5px solid var(--error); font-size: 0.85rem; padding: 8px 16px; }
     .logout-btn:hover { opacity: 0.8; }
+
+    /* Per-row info lookup */
+    .lookup-btn {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+    .lookup-btn:hover { border-color: var(--btn-bg); color: var(--btn-bg); }
+    .lookup-btn.loading { opacity: 0.5; cursor: not-allowed; }
+
+    /* Expandable info row */
+    .info-expand-row td {
+      padding: 0 !important;
+      border-bottom: 1px solid var(--row-border);
+    }
+    .info-expand-inner {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.3s ease;
+    }
+    .info-expand-inner.open { max-height: 500px; }
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0;
+      padding: 12px 20px 16px;
+      background: var(--info-bg, #f8faff);
+      border-top: 1px solid var(--info-border, #e0e7ff);
+    }
+    [data-theme="dark"] .info-grid { background: #1a1f35; border-color: #312e81; }
+    .info-cell {
+      padding: 6px 12px 6px 0;
+    }
+    .info-cell-key {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--info-label, #6366f1);
+      display: block;
+      margin-bottom: 2px;
+    }
+    [data-theme="dark"] .info-cell-key { color: #818cf8; }
+    .info-cell-val {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+    .tag {
+      display: inline-block; border-radius: 999px;
+      padding: 1px 8px; font-size: 0.73rem; font-weight: 600;
+    }
+    .tag-yes { background: #fef2f2; color: #dc2626; }
+    .tag-no  { background: #f0fdf4; color: #16a34a; }
+    [data-theme="dark"] .tag-yes { background: #450a0a; color: #fca5a5; }
+    [data-theme="dark"] .tag-no  { background: #052e16; color: #86efac; }
+    .info-error { padding: 10px 20px; font-size: 0.85rem; color: var(--error); }
   </style>
 </head>
 <body>
@@ -261,6 +323,7 @@
             <th>IP Address</th>
             <th>Timestamp (UTC)</th>
             <th>Record ID</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="tableBody">
@@ -332,17 +395,93 @@
     function renderTable(items) {
       document.getElementById('resultCount').textContent = `Showing ${items.length} of ${allItems.length}`;
       if (items.length === 0) {
-        document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">No records match your search.</td></tr>';
+        document.getElementById('tableBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">No records match your search.</td></tr>';
         return;
       }
-      document.getElementById('tableBody').innerHTML = items.map((item, idx) => `
-        <tr>
-          <td>${idx + 1}</td>
-          <td class="ip-cell"><span class="badge">${escHtml(item.ip_address || '—')}</span></td>
-          <td>${item.timestamp ? formatDate(item.timestamp) : '—'}</td>
-          <td style="font-family:monospace;font-size:0.78rem;color:var(--text-muted)">${escHtml(item.id || '—')}</td>
-        </tr>
-      `).join('');
+      document.getElementById('tableBody').innerHTML = items.map((item, idx) => {
+        const rowId = `row-${item.id}`;
+        const infoId = `info-${item.id}`;
+        return `
+          <tr id="${rowId}">
+            <td>${idx + 1}</td>
+            <td class="ip-cell"><span class="badge">${escHtml(item.ip_address || '—')}</span></td>
+            <td>${item.timestamp ? formatDate(item.timestamp) : '—'}</td>
+            <td style="font-family:monospace;font-size:0.78rem;color:var(--text-muted)">${escHtml(item.id || '—')}</td>
+            <td><button class="lookup-btn" id="btn-${item.id}" onclick="lookupInfo('${escHtml(item.ip_address)}','${item.id}')">🔍 Details</button></td>
+          </tr>
+          <tr class="info-expand-row" id="${infoId}-row">
+            <td colspan="5">
+              <div class="info-expand-inner" id="${infoId}"></div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function lookupInfo(ip, id) {
+      const btn = document.getElementById(`btn-${id}`);
+      const panel = document.getElementById(`info-${id}`);
+      const isOpen = panel.classList.contains('open');
+
+      // Toggle closed if already open
+      if (isOpen) {
+        panel.classList.remove('open');
+        btn.textContent = '🔍 Details';
+        return;
+      }
+
+      // If already loaded, just open
+      if (panel.dataset.loaded === 'true') {
+        panel.classList.add('open');
+        btn.textContent = '▲ Hide';
+        return;
+      }
+
+      btn.classList.add('loading');
+      btn.textContent = '…';
+      panel.innerHTML = '<div style="padding:12px 20px;color:var(--text-muted);font-size:0.85rem">Looking up…</div>';
+      panel.classList.add('open');
+
+      try {
+        const res = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        if (d.error) throw new Error(d.reason || 'Lookup failed');
+
+        const boolTag = v => v
+          ? '<span class="tag tag-yes">Yes</span>'
+          : '<span class="tag tag-no">No</span>';
+
+        const fields = [
+          ['Country',    escHtml(d.country_name)],
+          ['Region',     escHtml(d.region)],
+          ['City',       escHtml(d.city)],
+          ['Postal',     escHtml(d.postal || '—')],
+          ['Timezone',   escHtml(d.timezone)],
+          ['ISP / Org',  escHtml(d.org)],
+          ['ASN',        escHtml(d.asn)],
+          ['Mobile',     boolTag(d.mobile)],
+          ['VPN/Proxy',  boolTag(d.proxy)],
+          ['Datacenter', boolTag(d.datacenter)],
+        ];
+
+        panel.innerHTML = `<div class="info-grid">${
+          fields.map(([k, v]) =>
+            `<div class="info-cell">
+               <span class="info-cell-key">${k}</span>
+               <span class="info-cell-val">${v}</span>
+             </div>`
+          ).join('')
+        }</div>`;
+
+        panel.dataset.loaded = 'true';
+        btn.textContent = '▲ Hide';
+      } catch (err) {
+        panel.innerHTML = `<div class="info-error">❌ Lookup failed: ${escHtml(err.message)}</div>`;
+        btn.textContent = '🔍 Details';
+      } finally {
+        btn.classList.remove('loading');
+      }
     }
 
     function filterTable() {
