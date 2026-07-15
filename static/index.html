@@ -136,13 +136,8 @@
       border: 1px solid var(--ip-border);
       border-radius: 8px;
       padding: 16px 20px;
-      font-family: monospace;
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: var(--ip-color);
       display: none;
-      letter-spacing: 0.04em;
-      transition: background 0.3s, border-color 0.3s, color 0.3s;
+      transition: background 0.3s, border-color 0.3s;
     }
     .ip-label {
       font-size: 0.75rem;
@@ -151,10 +146,38 @@
       letter-spacing: 0.1em;
       color: var(--ip-label);
       display: block;
-      margin-bottom: 4px;
+      margin-bottom: 8px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       transition: color 0.3s;
     }
+    .ip-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    #ipValue {
+      font-family: monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--ip-color);
+      letter-spacing: 0.04em;
+      transition: color 0.3s;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1.5px solid var(--ip-border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--ip-color);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+    }
+    .copy-btn:hover { background: var(--ip-border); }
+    .copy-btn.copied { color: #16a34a; border-color: #16a34a; }
   </style>
 </head>
 <body>
@@ -173,7 +196,10 @@
     <div id="status"></div>
     <div id="ipDisplay" class="ip-display">
       <span class="ip-label">Your public IP address</span>
-      <span id="ipValue"></span>
+      <div class="ip-row">
+        <span id="ipValue"></span>
+        <button class="copy-btn" id="copyBtn" onclick="copyIP()">Copy</button>
+      </div>
     </div>
   </div>
 
@@ -200,11 +226,14 @@
       const status = document.getElementById('status');
       const ipDisplay = document.getElementById('ipDisplay');
       const ipValue = document.getElementById('ipValue');
+      const copyBtn = document.getElementById('copyBtn');
 
       btn.disabled = true;
       status.className = 'loading';
       status.textContent = 'Looking up your IP address…';
       ipDisplay.style.display = 'none';
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
 
       try {
         const res = await fetch(`${API_URL}/log-ip`, {
@@ -223,6 +252,23 @@
         status.textContent = `❌ Could not retrieve IP: ${err.message}`;
       } finally {
         btn.disabled = false;
+      }
+    }
+
+    async function copyIP() {
+      const ip = document.getElementById('ipValue').textContent;
+      const btn = document.getElementById('copyBtn');
+      try {
+        await navigator.clipboard.writeText(ip);
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      } catch {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
       }
     }
   </script>
