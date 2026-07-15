@@ -1,0 +1,400 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  IP Logger — Serverless stack that serves a secure web page allowing visitors
+  to record their IP address, and an admin page to view all logged IPs.
+  Resources: DynamoDB, Lambda (x2), API Gateway, S3, CloudFront (OAC).
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  AdminApiKey:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: Secret key required to access the admin /admin/ips endpoint.
+    Default: CHANGE_ME_USE_A_STRONG_SECRET
+
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+    Description: Deployment environment tag.
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ── DynamoDB ──────────────────────────────────────────────────────────────
+  IpLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ip_logs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: ip-logger
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ── IAM Role for Lambda ───────────────────────────────────────────────────
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ip-logger-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ip-logger-dynamo
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt IpLogsTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                Resource: !GetAtt IpLogsTable.Arn
+
+  # ── Lambda: log IP ────────────────────────────────────────────────────────
+  LogIpFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ip-logger-log
+      Runtime: python3.12
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Handler: log_ip.handler
+      Timeout: 10
+      Code:
+        ZipFile: |
+          import boto3, uuid, json
+          from datetime import datetime, timezone
+          dynamodb = boto3.resource('dynamodb')
+          table = dynamodb.Table('ip_logs')
+          def handler(event, context):
+              ip = event.get('requestContext', {}).get('identity', {}).get('sourceIp', 'unknown')
+              item = {
+                  'id': str(uuid.uuid4()),
+                  'ip_address': ip,
+                  'timestamp': datetime.now(timezone.utc).isoformat()
+              }
+              table.put_item(Item=item)
+              origin = (event.get('headers') or {}).get('origin', '')
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Access-Control-Allow-Origin': origin,
+                      'Access-Control-Allow-Headers': 'Content-Type',
+                      'Access-Control-Allow-Methods': 'POST,OPTIONS',
+                      'Content-Type': 'application/json'
+                  },
+                  'body': json.dumps({'message': 'IP logged', 'ip': ip})
+              }
+      Tags:
+        - Key: Project
+          Value: ip-logger
+
+  # ── Lambda: get IPs (admin) ───────────────────────────────────────────────
+  GetIpsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ip-logger-get
+      Runtime: python3.12
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Handler: get_ips.handler
+      Timeout: 10
+      Environment:
+        Variables:
+          ADMIN_API_KEY: !Ref AdminApiKey
+      Code:
+        ZipFile: |
+          import boto3, json, os
+          dynamodb = boto3.resource('dynamodb')
+          table = dynamodb.Table('ip_logs')
+          def handler(event, context):
+              headers = event.get('headers') or {}
+              api_key = headers.get('x-admin-key') or headers.get('X-Admin-Key', '')
+              expected_key = os.environ.get('ADMIN_API_KEY', '')
+              if not expected_key or api_key != expected_key:
+                  return {'statusCode': 403, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'error': 'Forbidden'})}
+              result = table.scan()
+              items = result.get('Items', [])
+              while 'LastEvaluatedKey' in result:
+                  result = table.scan(ExclusiveStartKey=result['LastEvaluatedKey'])
+                  items.extend(result.get('Items', []))
+              items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+              origin = (event.get('headers') or {}).get('origin', '')
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Access-Control-Allow-Origin': origin,
+                      'Access-Control-Allow-Headers': 'Content-Type,X-Admin-Key',
+                      'Access-Control-Allow-Methods': 'GET,OPTIONS',
+                      'Content-Type': 'application/json'
+                  },
+                  'body': json.dumps({'items': items, 'count': len(items)})
+              }
+      Tags:
+        - Key: Project
+          Value: ip-logger
+
+  # ── API Gateway ───────────────────────────────────────────────────────────
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: ip-logger-api
+      Description: IP Logger REST API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # /log-ip resource
+  LogIpResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: log-ip
+
+  # POST /log-ip
+  LogIpPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref LogIpResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt LogIpFunction.Arn
+
+  # OPTIONS /log-ip (CORS preflight)
+  LogIpOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref LogIpResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode":200}'
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Admin-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # /admin resource
+  AdminResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: admin
+
+  # /admin/ips resource
+  AdminIpsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref AdminResource
+      PathPart: ips
+
+  # GET /admin/ips
+  AdminIpsGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref AdminIpsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+          - LambdaArn: !GetAtt GetIpsFunction.Arn
+
+  # OPTIONS /admin/ips (CORS preflight)
+  AdminIpsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref AdminIpsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode":200}'
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Admin-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - LogIpPostMethod
+      - LogIpOptionsMethod
+      - AdminIpsGetMethod
+      - AdminIpsOptionsMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: prod
+
+  # Lambda permissions for API Gateway
+  LogIpLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LogIpFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/log-ip
+
+  GetIpsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt GetIpsFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/admin/ips
+
+  # ── S3 Bucket (private) ───────────────────────────────────────────────────
+  StaticSiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ip-logger-static-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: ip-logger
+
+  # ── CloudFront OAC ────────────────────────────────────────────────────────
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: ip-logger-oac
+        Description: OAC for IP Logger S3 bucket
+        SigningProtocol: sigv4
+        SigningBehavior: always
+        OriginAccessControlOriginType: s3
+
+  # ── CloudFront Distribution ───────────────────────────────────────────────
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: IP Logger static site
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - Id: s3-ip-logger
+            DomainName: !Sub ${StaticSiteBucket}.s3.${AWS::Region}.amazonaws.com
+            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: s3-ip-logger
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          # Managed-CachingOptimized policy
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+      Tags:
+        - Key: Project
+          Value: ip-logger
+
+  # S3 bucket policy — allow CloudFront OAC only
+  StaticSiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StaticSiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub arn:aws:s3:::${StaticSiteBucket}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  PublicPageUrl:
+    Description: URL of the public IP logging page
+    Value: !Sub https://${CloudFrontDistribution.DomainName}/index.html
+
+  AdminPageUrl:
+    Description: URL of the admin IP listing page
+    Value: !Sub https://${CloudFrontDistribution.DomainName}/admin.html
+
+  ApiEndpoint:
+    Description: Base URL of the API Gateway
+    Value: !Sub https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+
+  CloudFrontDomain:
+    Description: CloudFront distribution domain
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  DynamoDBTableName:
+    Description: DynamoDB table name
+    Value: !Ref IpLogsTable
+
+  S3BucketName:
+    Description: S3 bucket for static assets
+    Value: !Ref StaticSiteBucket

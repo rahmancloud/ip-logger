@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — IP Logs</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    h1 { font-size: 1.6rem; color: #1a202c; }
+    .auth-form {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      padding: 40px;
+      max-width: 420px;
+      margin: 80px auto 0;
+      text-align: center;
+    }
+    .auth-form h2 { margin-bottom: 8px; color: #1a202c; }
+    .auth-form p { color: #718096; margin-bottom: 24px; font-size: 0.9rem; }
+    .input-group { display: flex; gap: 8px; }
+    input[type="password"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="password"]:focus { border-color: #4f46e5; }
+    button {
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    button:hover { background: #4338ca; }
+    button:disabled { background: #a5b4fc; cursor: not-allowed; }
+    #authError { color: #dc2626; font-size: 0.85rem; margin-top: 10px; min-height: 18px; }
+    .dashboard { display: none; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-number { font-size: 2rem; font-weight: 700; color: #4f46e5; }
+    .stat-label { font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    input[type="search"] {
+      flex: 1;
+      min-width: 200px;
+      padding: 9px 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    input[type="search"]:focus { border-color: #4f46e5; }
+    .table-wrap {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: #f7f8fc; }
+    th {
+      text-align: left;
+      padding: 14px 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #4a5568;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    td {
+      padding: 14px 20px;
+      font-size: 0.9rem;
+      color: #2d3748;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+    .ip-cell { font-family: monospace; font-size: 0.95rem; }
+    .badge {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #4f46e5;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    #loadingMsg { text-align: center; padding: 40px; color: #718096; }
+    #emptyMsg { text-align: center; padding: 40px; color: #a0aec0; display: none; }
+    .refresh-btn { background: #fff; color: #4f46e5; border: 1.5px solid #4f46e5; }
+    .refresh-btn:hover { background: #eef2ff; }
+    .logout-btn { background: #fff; color: #dc2626; border: 1.5px solid #dc2626; font-size: 0.85rem; padding: 8px 16px; }
+    .logout-btn:hover { background: #fff5f5; }
+  </style>
+</head>
+<body>
+  <!-- Auth screen -->
+  <div id="authScreen" class="auth-form">
+    <h2>🔐 Admin Login</h2>
+    <p>Enter your admin API key to view IP logs.</p>
+    <div class="input-group">
+      <input type="password" id="apiKeyInput" placeholder="Admin API Key" onkeydown="if(event.key==='Enter')login()" />
+      <button onclick="login()">Login</button>
+    </div>
+    <div id="authError"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="container dashboard">
+    <header>
+      <h1>📋 IP Address Logs</h1>
+      <div style="display:flex;gap:8px">
+        <button class="refresh-btn" onclick="loadIPs()">↻ Refresh</button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-number" id="totalCount">—</div>
+        <div class="stat-label">Total Entries</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="uniqueCount">—</div>
+        <div class="stat-label">Unique IPs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="todayCount">—</div>
+        <div class="stat-label">Today</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input type="search" id="searchInput" placeholder="Search by IP address…" oninput="filterTable()" />
+      <span id="resultCount" style="color:#718096;font-size:0.85rem;white-space:nowrap;"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>IP Address</th>
+            <th>Timestamp (UTC)</th>
+            <th>Record ID</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="4" id="loadingMsg">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div id="emptyMsg">No records found.</div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://0s4pepzdxf.execute-api.ap-southeast-5.amazonaws.com/prod';
+    let allItems = [];
+    let adminKey = '';
+
+    function login() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      if (!key) {
+        document.getElementById('authError').textContent = 'Please enter the admin key.';
+        return;
+      }
+      adminKey = key;
+      document.getElementById('authError').textContent = '';
+      loadIPs();
+    }
+
+    function logout() {
+      adminKey = '';
+      allItems = [];
+      document.getElementById('authScreen').style.display = 'block';
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('apiKeyInput').value = '';
+    }
+
+    async function loadIPs() {
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" id="loadingMsg" style="text-align:center;padding:40px;color:#718096">Loading…</td></tr>';
+
+      try {
+        const res = await fetch(`${API_URL}/admin/ips`, {
+          headers: { 'X-Admin-Key': adminKey }
+        });
+
+        if (res.status === 403) {
+          document.getElementById('authError').textContent = 'Invalid admin key.';
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        allItems = data.items || [];
+
+        // Show dashboard
+        document.getElementById('authScreen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+
+        updateStats();
+        renderTable(allItems);
+      } catch (err) {
+        document.getElementById('authError').textContent = `Error: ${err.message}`;
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:#dc2626">Failed to load data: ${err.message}</td></tr>`;
+      }
+    }
+
+    function updateStats() {
+      document.getElementById('totalCount').textContent = allItems.length;
+      const unique = new Set(allItems.map(i => i.ip_address)).size;
+      document.getElementById('uniqueCount').textContent = unique;
+      const today = new Date().toISOString().slice(0, 10);
+      const todayCount = allItems.filter(i => i.timestamp && i.timestamp.startsWith(today)).length;
+      document.getElementById('todayCount').textContent = todayCount;
+    }
+
+    function renderTable(items) {
+      const tbody = document.getElementById('tableBody');
+      document.getElementById('resultCount').textContent = `Showing ${items.length} of ${allItems.length}`;
+
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#a0aec0">No records match your search.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map((item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td class="ip-cell"><span class="badge">${escHtml(item.ip_address || '—')}</span></td>
+          <td>${item.timestamp ? formatDate(item.timestamp) : '—'}</td>
+          <td style="font-family:monospace;font-size:0.78rem;color:#a0aec0">${escHtml(item.id || '—')}</td>
+        </tr>
+      `).join('');
+    }
+
+    function filterTable() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = allItems.filter(i =>
+        (i.ip_address || '').toLowerCase().includes(q) ||
+        (i.id || '').toLowerCase().includes(q)
+      );
+      renderTable(filtered);
+    }
+
+    function formatDate(iso) {
+      try {
+        return new Date(iso).toLocaleString('en-GB', {
+          year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          timeZone: 'UTC'
+        }) + ' UTC';
+      } catch { return iso; }
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>
+</body>
+</html>
